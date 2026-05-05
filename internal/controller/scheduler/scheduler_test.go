@@ -1,16 +1,15 @@
-package scheduler_test
+package scheduler
 
 import (
 	"testing"
 	"time"
 
-	"github.com/cirruslabs/orchard/internal/controller/scheduler"
 	v1 "github.com/cirruslabs/orchard/pkg/resource/v1"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProcessVMsSkipsUnscheduledPodVMs(t *testing.T) {
-	unscheduled, _ := scheduler.ProcessVMs([]v1.VM{
+	unscheduled, _ := ProcessVMs([]v1.VM{
 		{
 			Meta: v1.Meta{Name: "standalone"},
 		},
@@ -26,7 +25,7 @@ func TestProcessVMsSkipsUnscheduledPodVMs(t *testing.T) {
 
 func TestProcessPodsSortsByCreationTime(t *testing.T) {
 	createdAt := time.Now()
-	unscheduled := scheduler.ProcessPods([]v1.Pod{
+	unscheduled := ProcessPods([]v1.Pod{
 		{
 			Meta: v1.Meta{Name: "second", CreatedAt: createdAt.Add(time.Second)},
 		},
@@ -38,4 +37,14 @@ func TestProcessPodsSortsByCreationTime(t *testing.T) {
 	require.Len(t, unscheduled, 2)
 	require.Equal(t, "first", unscheduled[0].Name)
 	require.Equal(t, "second", unscheduled[1].Name)
+}
+
+func TestCompatiblePodAndWorkerUsesDefaultedPlatform(t *testing.T) {
+	require.True(t, compatiblePodAndWorker(
+		v1.Pod{Main: v1.PodVM{}},
+		v1.Worker{
+			Arch:    v1.ArchitectureARM64,
+			Runtime: v1.RuntimeTart,
+		},
+	))
 }

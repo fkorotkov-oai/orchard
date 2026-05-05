@@ -17,6 +17,7 @@ import (
 	"github.com/cirruslabs/orchard/internal/tests/devcontroller"
 	"github.com/cirruslabs/orchard/internal/tests/platformdependent"
 	"github.com/cirruslabs/orchard/internal/tests/wait"
+	"github.com/cirruslabs/orchard/internal/worker"
 	"github.com/cirruslabs/orchard/internal/worker/ondiskname"
 	"github.com/cirruslabs/orchard/internal/worker/vmmanager"
 	v1 "github.com/cirruslabs/orchard/pkg/resource/v1"
@@ -166,7 +167,13 @@ func TestFailedBootScript(t *testing.T) {
 }
 
 func TestPodLifecycle(t *testing.T) {
-	devClient, _, _ := devcontroller.StartIntegrationTestEnvironment(t)
+	devClient, _, _ := devcontroller.StartIntegrationTestEnvironmentWithAdditionalOpts(
+		t,
+		false,
+		[]controller.Option{controller.WithSynthetic()},
+		false,
+		[]worker.Option{worker.WithSynthetic()},
+	)
 
 	toPodVM := func(name string, vm *v1.VM) v1.PodVM {
 		return v1.PodVM{
@@ -201,7 +208,7 @@ func TestPodLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, wait.Wait(2*time.Minute, func() bool {
+	require.True(t, wait.Wait(30*time.Second, func() bool {
 		pod, err := devClient.Pods().Get(context.Background(), "test-pod")
 		require.NoError(t, err)
 		return pod.Status == v1.PodStatusRunning || pod.Status == v1.PodStatusFailed

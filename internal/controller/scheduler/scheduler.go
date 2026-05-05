@@ -594,7 +594,8 @@ func compatibleArchAndRuntime(vm v1.VM, worker v1.Worker) bool {
 }
 
 func compatiblePodAndWorker(pod v1.Pod, worker v1.Worker) bool {
-	return pod.Main.Arch == worker.Arch && pod.Main.Runtime == worker.Runtime
+	platform := pod.Main.Platform()
+	return platform.Arch == worker.Arch && platform.Runtime == worker.Runtime
 }
 
 func podLabels(pod v1.Pod) v1.Labels {
