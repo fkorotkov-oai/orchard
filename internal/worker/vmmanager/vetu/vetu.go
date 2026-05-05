@@ -104,6 +104,17 @@ func NewVM(
 			return
 		}
 
+		if vm.resource.BootScript != nil {
+			vm.SetStatusMessage("VM booted, running boot script...")
+
+			if err := vm.RunScriptAndWait(vm.ctx, vm.resource.Username, vm.resource.Password, vm.resource.BootScript,
+				eventStreamer, vm.dialer, vm.IP); err != nil {
+				vm.SetErr(err)
+
+				return
+			}
+		}
+
 		// Backward compatibility with v1.VM specification's "Status" field
 		vm.SetStarted(true)
 

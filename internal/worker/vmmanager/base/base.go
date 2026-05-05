@@ -282,3 +282,39 @@ func (vm *VM) RunScript(
 		vm.SetErr(fmt.Errorf("%w: failed to run startup script: %v", ErrVMFailed, err))
 	}
 }
+
+func (vm *VM) RunScriptAndWait(
+	ctx context.Context,
+	sshUser string,
+	sshPassword string,
+	script *v1.VMScript,
+	eventStreamer *client.EventStreamer,
+	dialer dialer.Dialer,
+	getIP func(ctx context.Context) (string, error),
+) error {
+	if eventStreamer != nil {
+		defer func() {
+			if err := eventStreamer.Close(); err != nil {
+				vm.logger.Errorf("errored during streaming events for boot script: %v", err)
+			}
+		}()
+	}
+
+	consumeLine := func(line string) {
+		if eventStreamer == nil {
+			return
+		}
+
+		eventStreamer.Stream(v1.Event{
+			Kind:      v1.EventKindLogLine,
+			Timestamp: time.Now().Unix(),
+			Payload:   line,
+		})
+	}
+
+	if err := vm.Shell(ctx, sshUser, sshPassword, script.ScriptContent, script.Env, consumeLine, dialer, getIP); err != nil {
+		return fmt.Errorf("%w: failed to run boot script: %v", ErrVMFailed, err)
+	}
+
+	return nil
+}

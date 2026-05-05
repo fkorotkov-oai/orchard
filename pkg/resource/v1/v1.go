@@ -59,6 +59,7 @@ type VM struct {
 
 	Username      string    `json:"username,omitempty"`
 	Password      string    `json:"password,omitempty"`
+	BootScript    *VMScript `json:"boot_script,omitempty"`
 	StartupScript *VMScript `json:"startup_script,omitempty"`
 
 	RestartPolicy RestartPolicy `json:"restart_policy,omitempty"`

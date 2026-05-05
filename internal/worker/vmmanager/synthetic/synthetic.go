@@ -72,6 +72,11 @@ func NewVM(
 		// Clone and configure
 		time.Sleep(randomDelay())
 
+		if vm.resource.BootScript != nil {
+			vm.SetStatusMessage("VM booted, running boot script...")
+			vm.runScript(vm.resource.BootScript, eventStreamer)
+		}
+
 		// Backward compatibility with v1.VM specification's "Status" field
 		vm.SetStarted(true)
 

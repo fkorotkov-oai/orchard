@@ -35,6 +35,7 @@ var resources map[string]string
 var labels map[string]string
 var randomSerial bool
 var restartPolicy string
+var bootScript string
 var startupScript string
 var hostDirsRaw []string
 var imagePullPolicy string
@@ -86,6 +87,9 @@ func newCreateVMCommand() *cobra.Command {
 	command.Flags().StringVar(&restartPolicy, "restart-policy", string(v1.RestartPolicyNever),
 		fmt.Sprintf("restart policy for this VM: specify %q to never restart or %q "+
 			"to only restart when the VM fails", v1.RestartPolicyNever, v1.RestartPolicyOnFailure))
+	command.Flags().StringVar(&bootScript, "boot-script", "",
+		"boot script to run synchronously during VM creation; a non-zero exit fails the VM "+
+			"(e.g. --boot-script=\"sync\") or a path to a script file prefixed with \"@\"")
 	command.Flags().StringVar(&startupScript, "startup-script", "",
 		"startup script (e.g. --startup-script=\"sync\") or a path to a script file prefixed with \"@\" "+
 			"(e.g. \"--startup-script=@script.sh\")")
@@ -185,8 +189,23 @@ func runCreateVM(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: %v", ErrVMFailed, err)
 	}
 
-	// Convert startup script, optionally reading it from the file system
+	// Convert boot and startup scripts, optionally reading them from the file system
 	const scriptFilePrefix = "@"
+
+	if strings.HasPrefix(bootScript, scriptFilePrefix) {
+		bootScriptBytes, err := os.ReadFile(strings.TrimPrefix(bootScript, scriptFilePrefix))
+		if err != nil {
+			return err
+		}
+
+		vm.BootScript = &v1.VMScript{
+			ScriptContent: string(bootScriptBytes),
+		}
+	} else if bootScript != "" {
+		vm.BootScript = &v1.VMScript{
+			ScriptContent: bootScript,
+		}
+	}
 
 	if strings.HasPrefix(startupScript, scriptFilePrefix) {
 		startupScriptBytes, err := os.ReadFile(strings.TrimPrefix(startupScript, scriptFilePrefix))

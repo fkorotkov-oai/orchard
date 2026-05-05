@@ -751,6 +751,16 @@ components:
           type: string
           description: SSH password to use when connecting to a VM
           default: admin
+        boot_script:
+          type: object
+          description: Boot script to run synchronously after the VM boots; a non-zero exit fails VM creation
+          properties:
+            script_content:
+              type: string
+            env:
+              type: object
+              additionalProperties:
+                type: string
         startup_script:
           type: object
           description: Startup script to run after the VM boots and becomes accessible via SSH
