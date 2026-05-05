@@ -52,6 +52,7 @@ func (controller *Controller) createPod(ctx *gin.Context) responder.Responder {
 		}
 
 		vm := member.ToVM(podVMResourceName(pod.Name, member.Name), pod.Name, index == 0)
+		vm.PodOrder = index
 		if responder := controller.prepareVM(&vm); responder != nil {
 			return responder
 		}

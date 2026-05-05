@@ -109,6 +109,11 @@ func NewVM(
 
 			if err := vm.RunScriptAndWait(vm.ctx, vm.resource.Username, vm.resource.Password, vm.resource.BootScript,
 				eventStreamer, vm.dialer, vm.IP); err != nil {
+				if eventStreamer != nil {
+					if closeErr := eventStreamer.Close(); closeErr != nil {
+						vm.logger.Errorf("errored during streaming events for boot script: %v", closeErr)
+					}
+				}
 				vm.SetErr(err)
 
 				return
@@ -219,6 +224,11 @@ func (vm *VM) run(ctx context.Context, eventStreamer *client.EventStreamer) {
 			eventStreamer, vm.dialer, vm.IP)
 	} else {
 		vm.SetStatusMessage("VM started")
+		if eventStreamer != nil {
+			if err := eventStreamer.Close(); err != nil {
+				vm.logger.Errorf("errored during streaming events for boot script: %v", err)
+			}
+		}
 	}
 
 	var runArgs = []string{"run"}

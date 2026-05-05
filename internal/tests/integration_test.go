@@ -131,6 +131,91 @@ func TestFailedStartupScript(t *testing.T) {
 		"failed to run startup script: Process exited with status 123")
 }
 
+func TestFailedBootScript(t *testing.T) {
+	devClient, _, _ := devcontroller.StartIntegrationTestEnvironment(t)
+
+	workers, err := devClient.Workers().List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, 1, len(workers))
+
+	vm := platformdependent.VM("test-vm")
+	vm.BootScript = &v1.VMScript{
+		ScriptContent: "set +e && exit 123",
+	}
+
+	err = devClient.VMs().Create(context.Background(), vm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.True(t, wait.Wait(2*time.Minute, func() bool {
+		vm, err := devClient.VMs().Get(context.Background(), "test-vm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Waiting for the VM to fail boot. Current status: %s", vm.Status)
+		return vm.Status == v1.VMStatusFailed
+	}), "failed to wait for the VM boot failure")
+	failedVM, err := devClient.VMs().Get(context.Background(), "test-vm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Contains(t, failedVM.StatusMessage,
+		"failed to run boot script: Process exited with status 123")
+}
+
+func TestPodLifecycle(t *testing.T) {
+	devClient, _, _ := devcontroller.StartIntegrationTestEnvironment(t)
+
+	toPodVM := func(name string, vm *v1.VM) v1.PodVM {
+		return v1.PodVM{
+			Name:            name,
+			Image:           vm.Image,
+			ImagePullPolicy: vm.ImagePullPolicy,
+			CPU:             vm.CPU,
+			Memory:          vm.Memory,
+			DiskSize:        vm.DiskSize,
+			NetBridged:      vm.NetBridged,
+			Headless:        vm.Headless,
+			Nested:          vm.Nested,
+			VMSpec:          vm.VMSpec,
+			Username:        vm.Username,
+			Password:        vm.Password,
+			BootScript:      vm.BootScript,
+			StartupScript:   vm.StartupScript,
+			RestartPolicy:   vm.RestartPolicy,
+			RandomSerial:    vm.RandomSerial,
+			Resources:       vm.Resources,
+			Labels:          vm.Labels,
+			HostDirs:        vm.HostDirs,
+		}
+	}
+
+	err := devClient.Pods().Create(context.Background(), &v1.Pod{
+		Meta: v1.Meta{Name: "test-pod"},
+		Main: toPodVM("main", platformdependent.VM("main")),
+		Additional: []v1.PodVM{
+			toPodVM("db", platformdependent.VM("db")),
+		},
+	})
+	require.NoError(t, err)
+
+	require.True(t, wait.Wait(2*time.Minute, func() bool {
+		pod, err := devClient.Pods().Get(context.Background(), "test-pod")
+		require.NoError(t, err)
+		return pod.Status == v1.PodStatusRunning || pod.Status == v1.PodStatusFailed
+	}), "failed to wait for the Pod to start")
+
+	pod, err := devClient.Pods().Get(context.Background(), "test-pod")
+	require.NoError(t, err)
+	require.Equal(t, v1.PodStatusRunning, pod.Status)
+	require.Equal(t, v1.VMStatusRunning, pod.VMs["main"].Status)
+	require.Equal(t, v1.VMStatusRunning, pod.VMs["db"].Status)
+
+	require.NoError(t, devClient.Pods().Delete(context.Background(), "test-pod"))
+}
+
 func TestPortForwarding(t *testing.T) {
 	ctx := context.Background()
 

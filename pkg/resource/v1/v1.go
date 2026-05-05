@@ -48,6 +48,7 @@ type VM struct {
 	PodName   string `json:"podName,omitempty"`
 	PodVMName string `json:"podVMName,omitempty"`
 	PodMain   bool   `json:"podMain,omitempty"`
+	PodOrder  int    `json:"podOrder,omitempty"`
 
 	// AssignedCPU is set by the Controller when the VM is scheduled.
 	//

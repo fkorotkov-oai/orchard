@@ -167,6 +167,11 @@ func (vm *VM) run(ctx context.Context, eventStreamer *client.EventStreamer) {
 		go vm.runScript(vm.resource.StartupScript, eventStreamer)
 	} else {
 		vm.SetStatusMessage("VM started")
+		if eventStreamer != nil {
+			if err := eventStreamer.Close(); err != nil {
+				vm.logger.Errorf("errored during streaming events for boot script: %v", err)
+			}
+		}
 	}
 
 	<-ctx.Done()

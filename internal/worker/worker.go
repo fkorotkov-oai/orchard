@@ -391,6 +391,9 @@ func (worker *Worker) syncVMs(ctx context.Context, updateVM func(context.Context
 		switch action {
 		case ActionCreate:
 			// Remote VM was created, but not the local VM
+			if !podVMCanBeCreated(*vmResource, remoteVMs) {
+				continue
+			}
 			worker.createVM(onDiskName, *vmResource)
 		case ActionMonitorPending:
 			if vmResource.StatusMessage != vm.StatusMessage() {
@@ -649,4 +652,21 @@ func sortNonExistentAndFailedFirst(input []lo.Tuple3[ondiskname.OnDiskName, *v1.
 			return 0
 		}
 	})
+}
+
+func podVMCanBeCreated(vm v1.VM, remoteVMs []v1.VM) bool {
+	if vm.PodName == "" {
+		return true
+	}
+
+	for _, sibling := range remoteVMs {
+		if sibling.PodName != vm.PodName || sibling.PodOrder <= vm.PodOrder {
+			continue
+		}
+		if sibling.Status != v1.VMStatusRunning {
+			return false
+		}
+	}
+
+	return true
 }

@@ -292,14 +292,6 @@ func (vm *VM) RunScriptAndWait(
 	dialer dialer.Dialer,
 	getIP func(ctx context.Context) (string, error),
 ) error {
-	if eventStreamer != nil {
-		defer func() {
-			if err := eventStreamer.Close(); err != nil {
-				vm.logger.Errorf("errored during streaming events for boot script: %v", err)
-			}
-		}()
-	}
-
 	consumeLine := func(line string) {
 		if eventStreamer == nil {
 			return

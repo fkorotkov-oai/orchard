@@ -367,6 +367,119 @@ paths:
                 $ref: '#/components/schemas/Events'
         '404':
           description: VM resource with the given name doesn't exist
+  /pods:
+    post:
+      summary: "Create a Pod"
+      tags:
+        - pods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/PodMeta'
+                - $ref: '#/components/schemas/PodSpec'
+      responses:
+        '200':
+          description: Pod resource was successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pod'
+        '409':
+          description: Pod resource with the same name already exists
+    get:
+      summary: "List Pods"
+      tags:
+        - pods
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pod'
+  /pods/{name}:
+    parameters:
+      - in: path
+        name: name
+        description: Pod name to retrieve
+        required: true
+        schema:
+          type: string
+    get:
+      summary: "Retrieve a Pod"
+      tags:
+        - pods
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pod'
+        '404':
+          description: Pod resource with the given name doesn't exist
+    delete:
+      summary: "Delete a Pod"
+      tags:
+        - pods
+      responses:
+        '200':
+          description: Pod resource was successfully deleted
+        '404':
+          description: Pod resource with the given name doesn't exist
+  /pods/{name}/exec:
+    get:
+      summary: "Execute a command inside a Pod's main VM"
+      tags:
+        - pods
+  /pods/{name}/port-forward:
+    get:
+      summary: "Port-forward to a Pod's main VM"
+      tags:
+        - pods
+  /pods/{name}/ip:
+    get:
+      summary: "Resolve a Pod's main VM IP"
+      tags:
+        - pods
+  /pods/{name}/events:
+    get:
+      summary: "Retrieve events for a Pod's main VM"
+      tags:
+        - pods
+    post:
+      summary: "Append events for a Pod's main VM"
+      tags:
+        - pods
+  /pods/{name}/vms/{vm}/exec:
+    get:
+      summary: "Execute a command inside a named Pod VM"
+      tags:
+        - pods
+  /pods/{name}/vms/{vm}/port-forward:
+    get:
+      summary: "Port-forward to a named Pod VM"
+      tags:
+        - pods
+  /pods/{name}/vms/{vm}/ip:
+    get:
+      summary: "Resolve a named Pod VM IP"
+      tags:
+        - pods
+  /pods/{name}/vms/{vm}/events:
+    get:
+      summary: "Retrieve events for a named Pod VM"
+      tags:
+        - pods
+    post:
+      summary: "Append events for a named Pod VM"
+      tags:
+        - pods
   /vms/{name}/port-forward:
     parameters:
       - in: path
@@ -619,6 +732,70 @@ components:
         - $ref: '#/components/schemas/VMMeta'
         - $ref: '#/components/schemas/VMSpec'
         - $ref: '#/components/schemas/VMState'
+    Pod:
+      title: Pod
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PodMeta'
+        - $ref: '#/components/schemas/PodSpec'
+        - $ref: '#/components/schemas/PodState'
+    PodMeta:
+      title: Pod Metadata
+      type: object
+      properties:
+        name:
+          type: string
+          description: Pod name
+    PodSpec:
+      title: Pod Specification
+      type: object
+      required:
+        - main
+      properties:
+        main:
+          $ref: '#/components/schemas/PodVM'
+        additional:
+          type: array
+          items:
+            $ref: '#/components/schemas/PodVM'
+    PodVM:
+      title: Pod VM
+      type: object
+      allOf:
+        - type: object
+          properties:
+            name:
+              type: string
+              description: VM name within the Pod
+        - $ref: '#/components/schemas/VMSpec'
+    PodState:
+      title: Pod State
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ pending, running, failed ]
+        status_message:
+          type: string
+        worker:
+          type: string
+        vms:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PodMemberStatus'
+    PodMemberStatus:
+      title: Pod Member Status
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ pending, running, failed ]
+        status_message:
+          type: string
+        worker:
+          type: string
     VMMeta:
       title: Virtual Machine Metadata
       type: object

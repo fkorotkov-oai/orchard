@@ -40,3 +40,28 @@ func TestSortNonExistentAndFailedFirst(t *testing.T) {
 
 	require.Equal(t, expected, target)
 }
+
+func TestPodVMCanBeCreated(t *testing.T) {
+	remoteVMs := []v1.VM{
+		{
+			PodName:  "pod",
+			PodOrder: 2,
+			Status:   v1.VMStatusRunning,
+		},
+		{
+			PodName:  "pod",
+			PodOrder: 1,
+			Status:   v1.VMStatusPending,
+		},
+	}
+
+	require.True(t, podVMCanBeCreated(v1.VM{
+		PodName:  "pod",
+		PodOrder: 1,
+	}, remoteVMs))
+	require.False(t, podVMCanBeCreated(v1.VM{
+		PodName:  "pod",
+		PodOrder: 0,
+	}, remoteVMs))
+	require.True(t, podVMCanBeCreated(v1.VM{}, remoteVMs))
+}
