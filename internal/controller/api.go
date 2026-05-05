@@ -188,6 +188,20 @@ func (controller *Controller) initAPI() *gin.Engine {
 		controller.appendVMEvents(c).Respond(c)
 	})
 
+	// Pods
+	v1.POST("/pods", func(c *gin.Context) {
+		controller.createPod(c).Respond(c)
+	})
+	v1.GET("/pods/:name", func(c *gin.Context) {
+		controller.getPod(c).Respond(c)
+	})
+	v1.GET("/pods", func(c *gin.Context) {
+		controller.listPods(c).Respond(c)
+	})
+	v1.DELETE("/pods/:name", func(c *gin.Context) {
+		controller.deletePod(c).Respond(c)
+	})
+
 	return ginEngine
 }
 

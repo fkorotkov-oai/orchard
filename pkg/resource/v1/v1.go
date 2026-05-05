@@ -44,6 +44,11 @@ type VM struct {
 	// Worker field is set by the Controller to assign this VM to a specific Worker.
 	Worker string `json:"worker,omitempty"`
 
+	// PodName, PodVMName and PodMain describe the owning Pod, if any.
+	PodName   string `json:"podName,omitempty"`
+	PodVMName string `json:"podVMName,omitempty"`
+	PodMain   bool   `json:"podMain,omitempty"`
+
 	// AssignedCPU is set by the Controller when the VM is scheduled.
 	//
 	// It's set to CPU when CPU non-zero, otherwise the value is taken from

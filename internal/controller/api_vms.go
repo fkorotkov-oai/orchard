@@ -43,6 +43,36 @@ func (controller *Controller) createVM(ctx *gin.Context) responder.Responder {
 		return responder.JSON(http.StatusPreconditionFailed, NewErrorResponse("VM image is empty"))
 	}
 
+	if responder := controller.prepareVM(&vm); responder != nil {
+		return responder
+	}
+
+	response := controller.storeUpdate(func(txn storepkg.Transaction) responder.Responder {
+		// Does the VM resource with this name already exists?
+		_, err := txn.GetVM(vm.Name)
+		if err != nil && !errors.Is(err, storepkg.ErrNotFound) {
+			controller.logger.Errorf("failed to check if the VM exists in the DB: %v", err)
+
+			return responder.Code(http.StatusInternalServerError)
+		}
+		if err == nil {
+			return responder.JSON(http.StatusConflict, NewErrorResponse("VM with this name already exists"))
+		}
+
+		if err := txn.SetVM(vm); err != nil {
+			controller.logger.Errorf("failed to create VM in the DB: %v", err)
+
+			return responder.Code(http.StatusInternalServerError)
+		}
+
+		return responder.JSON(http.StatusOK, &vm)
+	})
+	// request immediate scheduling
+	controller.scheduler.RequestScheduling()
+	return response
+}
+
+func (controller *Controller) prepareVM(vm *v1.VM) responder.Responder {
 	// Provide defaults
 	vm.Status = v1.VMStatusPending
 	vm.CreatedAt = time.Now()
@@ -122,29 +152,7 @@ func (controller *Controller) createVM(ctx *gin.Context) responder.Responder {
 		return responder
 	}
 
-	response := controller.storeUpdate(func(txn storepkg.Transaction) responder.Responder {
-		// Does the VM resource with this name already exists?
-		_, err := txn.GetVM(vm.Name)
-		if err != nil && !errors.Is(err, storepkg.ErrNotFound) {
-			controller.logger.Errorf("failed to check if the VM exists in the DB: %v", err)
-
-			return responder.Code(http.StatusInternalServerError)
-		}
-		if err == nil {
-			return responder.JSON(http.StatusConflict, NewErrorResponse("VM with this name already exists"))
-		}
-
-		if err := txn.SetVM(vm); err != nil {
-			controller.logger.Errorf("failed to create VM in the DB: %v", err)
-
-			return responder.Code(http.StatusInternalServerError)
-		}
-
-		return responder.JSON(http.StatusOK, &vm)
-	})
-	// request immediate scheduling
-	controller.scheduler.RequestScheduling()
-	return response
+	return nil
 }
 
 func (controller *Controller) updateVMSpec(ctx *gin.Context) responder.Responder {

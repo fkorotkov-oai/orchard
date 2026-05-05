@@ -26,6 +26,11 @@ type Store interface {
 }
 
 type Transaction interface {
+	GetPod(name string) (result *v1.Pod, err error)
+	SetPod(pod v1.Pod) (err error)
+	DeletePod(name string) (err error)
+	ListPods() (result []v1.Pod, err error)
+
 	GetVM(name string) (result *v1.VM, err error)
 	SetVM(vm v1.VM) (err error)
 	DeleteVM(name string) (err error)

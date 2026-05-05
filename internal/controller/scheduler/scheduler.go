@@ -215,6 +215,7 @@ func (scheduler *Scheduler) schedulingLoopIteration() (int, int, error) {
 	// that new scheduling profile.
 
 	var vms []v1.VM
+	var pods []v1.Pod
 	var workers []v1.Worker
 	var schedulerProfile v1.SchedulerProfile
 
@@ -222,6 +223,11 @@ func (scheduler *Scheduler) schedulingLoopIteration() (int, int, error) {
 		var err error
 
 		vms, err = txn.ListVMs()
+		if err != nil {
+			return err
+		}
+
+		pods, err = txn.ListPods()
 		if err != nil {
 			return err
 		}
@@ -243,6 +249,136 @@ func (scheduler *Scheduler) schedulingLoopIteration() (int, int, error) {
 	}
 
 	unscheduledVMs, workerInfos := ProcessVMs(vms)
+	unscheduledPods := ProcessPods(pods)
+
+NextPod:
+	for _, unscheduledPod := range unscheduledPods {
+		members := unscheduledPod.Members()
+		if len(members) == 0 {
+			continue
+		}
+
+		podResources := v1.Resources{}
+		for _, member := range members {
+			podResources = podResources.Added(member.Resources)
+		}
+
+		switch schedulerProfile {
+		case v1.SchedulerProfileDistributeLoad:
+			slices.SortFunc(workers, func(a, b v1.Worker) int {
+				return cmp.Compare(workerInfos[a.Name].NumRunningVMs,
+					workerInfos[b.Name].NumRunningVMs)
+			})
+		case v1.SchedulerProfileOptimizeUtilization:
+			fallthrough
+		default:
+			slices.SortFunc(workers, func(a, b v1.Worker) int {
+				return cmp.Compare(workerInfos[b.Name].NumRunningVMs,
+					workerInfos[a.Name].NumRunningVMs)
+			})
+		}
+
+	NextPodWorker:
+		for _, worker := range workers {
+			resourcesUsed := workerInfos.Get(worker.Name).ResourcesUsed
+			resourcesRemaining := worker.Resources.Subtracted(resourcesUsed)
+
+			if worker.Offline(scheduler.workerOfflineTimeout) ||
+				worker.SchedulingPaused ||
+				!compatiblePodAndWorker(unscheduledPod, worker) ||
+				!resourcesRemaining.CanFit(podResources) ||
+				!worker.Labels.Contains(podLabels(unscheduledPod)) {
+				continue NextPodWorker
+			}
+
+			err := scheduler.store.Update(func(txn storepkg.Transaction) error {
+				currentPod, err := txn.GetPod(unscheduledPod.Name)
+				if err != nil {
+					if errors.Is(err, storepkg.ErrNotFound) {
+						return ErrVMSchedulingSkipped
+					}
+
+					return err
+				}
+				if currentPod.UID != unscheduledPod.UID || currentPod.IsScheduled() {
+					return ErrVMSchedulingSkipped
+				}
+
+				currentWorker, err := txn.GetWorker(worker.Name)
+				if err != nil {
+					if errors.Is(err, storepkg.ErrNotFound) {
+						return ErrWorkerSchedulingSkipped
+					}
+
+					return err
+				}
+				if currentWorker.Offline(scheduler.workerOfflineTimeout) ||
+					currentWorker.SchedulingPaused ||
+					!compatiblePodAndWorker(*currentPod, *currentWorker) ||
+					currentWorker.MachineID != worker.MachineID ||
+					!currentWorker.Resources.Equal(worker.Resources) ||
+					!currentWorker.Labels.Contains(podLabels(*currentPod)) {
+					return ErrWorkerSchedulingSkipped
+				}
+
+				currentPod.Worker = worker.Name
+				currentPod.ScheduledAt = time.Now()
+
+				for _, member := range currentPod.Members() {
+					vm, err := txn.GetVM(podVMName(currentPod.Name, member.Name))
+					if err != nil {
+						return err
+					}
+					vm.Worker = worker.Name
+					vm.ScheduledAt = currentPod.ScheduledAt
+					v1.ConditionsSet(&vm.Conditions, v1.Condition{
+						Type:  v1.ConditionTypeScheduled,
+						State: v1.ConditionStateTrue,
+					})
+					if vm.CPU == 0 {
+						if worker.DefaultCPU != 0 {
+							vm.AssignedCPU = worker.DefaultCPU
+						} else {
+							vm.AssignedCPU = 4
+						}
+					} else {
+						vm.AssignedCPU = vm.CPU
+					}
+					if vm.Memory == 0 {
+						if worker.DefaultMemory != 0 {
+							vm.AssignedMemory = worker.DefaultMemory
+						} else {
+							vm.AssignedMemory = 8192
+						}
+					} else {
+						vm.AssignedMemory = vm.Memory
+					}
+					if err := txn.SetVM(*vm); err != nil {
+						return err
+					}
+				}
+
+				return txn.SetPod(*currentPod)
+			})
+			if err != nil {
+				if errors.Is(err, ErrVMSchedulingSkipped) {
+					continue NextPod
+				}
+				if errors.Is(err, ErrWorkerSchedulingSkipped) {
+					continue NextPodWorker
+				}
+				return 0, 0, err
+			}
+
+			for _, member := range unscheduledPod.Members() {
+				workerInfos.AddVM(worker.Name, member.Resources)
+			}
+			affectedWorkers.Add(worker.Name)
+			scheduler.schedulingTimeHistogram.Record(context.Background(),
+				time.Since(unscheduledPod.CreatedAt).Seconds())
+			break
+		}
+	}
 
 NextVM:
 	for _, unscheduledVM := range unscheduledVMs {
@@ -425,7 +561,7 @@ func ProcessVMs(vms []v1.VM) ([]v1.VM, WorkerInfos) {
 	for _, vm := range vms {
 		if vm.IsScheduled() {
 			workerToResources.AddVM(vm.Worker, vm.Resources)
-		} else {
+		} else if vm.PodName == "" {
 			unscheduledVMs = append(unscheduledVMs, vm)
 		}
 	}
@@ -438,8 +574,41 @@ func ProcessVMs(vms []v1.VM) ([]v1.VM, WorkerInfos) {
 	return unscheduledVMs, workerToResources
 }
 
+func ProcessPods(pods []v1.Pod) []v1.Pod {
+	var unscheduledPods []v1.Pod
+	for _, pod := range pods {
+		if !pod.IsScheduled() {
+			unscheduledPods = append(unscheduledPods, pod)
+		}
+	}
+
+	sort.Slice(unscheduledPods, func(i, j int) bool {
+		return unscheduledPods[i].CreatedAt.Before(unscheduledPods[j].CreatedAt)
+	})
+
+	return unscheduledPods
+}
+
 func compatibleArchAndRuntime(vm v1.VM, worker v1.Worker) bool {
 	return vm.Arch == worker.Arch && vm.Runtime == worker.Runtime
+}
+
+func compatiblePodAndWorker(pod v1.Pod, worker v1.Worker) bool {
+	return pod.Main.Arch == worker.Arch && pod.Main.Runtime == worker.Runtime
+}
+
+func podLabels(pod v1.Pod) v1.Labels {
+	result := v1.Labels{}
+	for _, member := range pod.Members() {
+		for key, value := range member.Labels {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func podVMName(podName string, memberName string) string {
+	return podName + ":" + memberName
 }
 
 func (scheduler *Scheduler) healthCheckingLoopIteration() (int, error) {
