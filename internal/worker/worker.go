@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"slices"
 	"time"
@@ -599,6 +600,30 @@ func (worker *Worker) deleteVM(vm vmmanager.VM) error {
 
 func (worker *Worker) createVM(odn ondiskname.OnDiskName, vmResource v1.VM) {
 	eventStreamer := worker.client.VMs().StreamEvents(vmResource.Name)
+
+	if vmResource.PodMain && vmResource.Runtime == v1.RuntimeTart {
+		for _, sibling := range worker.vmm.List() {
+			siblingResource := sibling.Resource()
+			if siblingResource.PodName != vmResource.PodName || siblingResource.PodMain {
+				continue
+			}
+
+			ipRaw, err := sibling.IP(context.Background())
+			if err != nil {
+				worker.logger.Warnf("failed to resolve Pod sibling IP for VM %q: %v", siblingResource.Name, err)
+				continue
+			}
+
+			ip, err := netip.ParseAddr(ipRaw)
+			if err != nil {
+				worker.logger.Warnf("failed to parse Pod sibling IP for VM %q: %v", siblingResource.Name, err)
+				continue
+			}
+
+			vmResource.NetSoftnetAllow = append(vmResource.NetSoftnetAllow,
+				netip.PrefixFrom(ip, ip.BitLen()).String())
+		}
+	}
 
 	vm := worker.runtime.NewVM(vmResource, eventStreamer, worker.vmPullTimeHistogram, worker.dialer, worker.logger)
 

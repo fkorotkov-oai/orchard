@@ -103,6 +103,11 @@ func (controller *Controller) prepareVM(vm *v1.VM) responder.Responder {
 		vm.Runtime = v1.RuntimeTart
 	}
 
+	if vm.PodName != "" && vm.Runtime == v1.RuntimeTart {
+		vm.NetSoftnetDeprecated = true
+		vm.NetSoftnet = true
+	}
+
 	if err := vm.Validate(); err != nil {
 		return responder.JSON(http.StatusPreconditionFailed, NewErrorResponse("%v", err))
 	}
