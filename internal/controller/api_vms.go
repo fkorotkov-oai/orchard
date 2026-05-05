@@ -173,6 +173,10 @@ func (controller *Controller) updateVMSpec(ctx *gin.Context) responder.Responder
 		if err != nil {
 			return responder.Error(err)
 		}
+		if dbVM.PodName != "" {
+			return responder.JSON(http.StatusPreconditionFailed,
+				NewErrorResponse("cannot update VM owned by Pod %q", dbVM.PodName))
+		}
 
 		if dbVM.TerminalState() {
 			return responder.JSON(http.StatusPreconditionFailed,
@@ -414,6 +418,10 @@ func (controller *Controller) deleteVM(ctx *gin.Context) responder.Responder {
 		vm, err := txn.GetVM(name)
 		if err != nil {
 			return responder.Error(err)
+		}
+		if vm.PodName != "" {
+			return responder.JSON(http.StatusPreconditionFailed,
+				NewErrorResponse("cannot delete VM owned by Pod %q", vm.PodName))
 		}
 		err = txn.DeleteVM(name)
 		if err != nil {
