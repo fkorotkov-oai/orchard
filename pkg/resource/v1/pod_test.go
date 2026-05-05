@@ -58,3 +58,18 @@ func TestPodValidateConflictingPlatforms(t *testing.T) {
 
 	require.EqualError(t, pod.Validate(), "all pod VMs must use the same os, arch and runtime")
 }
+
+func TestPodValidateRejectsVetuNetworkPolicy(t *testing.T) {
+	pod := v1.Pod{
+		Main: v1.PodVM{
+			Name:   "main",
+			Image:  "main-image",
+			VMSpec: v1.VMSpec{Runtime: v1.RuntimeVetu},
+			Network: v1.PodNetwork{
+				Allow: []string{"10.0.0.0/8"},
+			},
+		},
+	}
+
+	require.EqualError(t, pod.Validate(), `runtime "vetu" does not support Pod network allow/block lists`)
+}

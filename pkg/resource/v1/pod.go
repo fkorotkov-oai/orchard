@@ -88,6 +88,7 @@ type PodVM struct {
 	Nested          bool            `json:"nested,omitempty"`
 
 	VMSpec
+	Network PodNetwork `json:"network,omitempty"`
 
 	Username      string    `json:"username,omitempty"`
 	Password      string    `json:"password,omitempty"`
@@ -102,6 +103,10 @@ type PodVM struct {
 }
 
 func (vm *PodVM) Validate() error {
+	if vm.Platform().Runtime == RuntimeVetu && (len(vm.Network.Allow) != 0 || len(vm.Network.Block) != 0) {
+		return fmt.Errorf("runtime %q does not support Pod network allow/block lists", RuntimeVetu)
+	}
+
 	asVM := vm.ToVM("", "", false)
 	return asVM.Validate()
 }
@@ -128,6 +133,11 @@ func (vm *PodVM) Platform() PodPlatform {
 }
 
 func (vm *PodVM) ToVM(name string, podName string, podMain bool) VM {
+	netSoftnetAllow := append([]string(nil), vm.NetSoftnetAllow...)
+	netSoftnetAllow = append(netSoftnetAllow, vm.Network.Allow...)
+	netSoftnetBlock := append([]string(nil), vm.NetSoftnetBlock...)
+	netSoftnetBlock = append(netSoftnetBlock, vm.Network.Block...)
+
 	return VM{
 		Image:           vm.Image,
 		ImagePullPolicy: vm.ImagePullPolicy,
@@ -137,19 +147,29 @@ func (vm *PodVM) ToVM(name string, podName string, podMain bool) VM {
 		NetBridged:      vm.NetBridged,
 		Headless:        vm.Headless,
 		Nested:          vm.Nested,
-		VMSpec:          vm.VMSpec,
-		Username:        vm.Username,
-		Password:        vm.Password,
-		BootScript:      vm.BootScript,
-		StartupScript:   vm.StartupScript,
-		RestartPolicy:   vm.RestartPolicy,
-		RandomSerial:    vm.RandomSerial,
-		Resources:       vm.Resources,
-		Labels:          vm.Labels,
-		HostDirs:        vm.HostDirs,
-		PodName:         podName,
-		PodVMName:       vm.Name,
-		PodMain:         podMain,
+		VMSpec: VMSpec{
+			OS:                   vm.OS,
+			Arch:                 vm.Arch,
+			Runtime:              vm.Runtime,
+			NetSoftnetDeprecated: vm.NetSoftnetDeprecated,
+			NetSoftnet:           vm.NetSoftnet,
+			NetSoftnetAllow:      netSoftnetAllow,
+			NetSoftnetBlock:      netSoftnetBlock,
+			Suspendable:          vm.Suspendable,
+			PowerState:           vm.PowerState,
+		},
+		Username:      vm.Username,
+		Password:      vm.Password,
+		BootScript:    vm.BootScript,
+		StartupScript: vm.StartupScript,
+		RestartPolicy: vm.RestartPolicy,
+		RandomSerial:  vm.RandomSerial,
+		Resources:     vm.Resources,
+		Labels:        vm.Labels,
+		HostDirs:      vm.HostDirs,
+		PodName:       podName,
+		PodVMName:     vm.Name,
+		PodMain:       podMain,
 		Meta: Meta{
 			Name: name,
 		},
@@ -160,6 +180,11 @@ type PodPlatform struct {
 	OS      OS
 	Arch    Architecture
 	Runtime Runtime
+}
+
+type PodNetwork struct {
+	Allow []string `json:"allow,omitempty"`
+	Block []string `json:"block,omitempty"`
 }
 
 type PodState struct {
