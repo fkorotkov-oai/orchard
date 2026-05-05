@@ -170,6 +170,46 @@ func (controller *Controller) deletePod(ctx *gin.Context) responder.Responder {
 	})
 }
 
+func (controller *Controller) execPodMainVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, "", controller.execVM)
+}
+
+func (controller *Controller) execPodVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, ctx.Param("vm"), controller.execVM)
+}
+
+func (controller *Controller) portForwardPodMainVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, "", controller.portForwardVM)
+}
+
+func (controller *Controller) portForwardPodVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, ctx.Param("vm"), controller.portForwardVM)
+}
+
+func (controller *Controller) ipPodMainVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, "", controller.ip)
+}
+
+func (controller *Controller) ipPodVM(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, ctx.Param("vm"), controller.ip)
+}
+
+func (controller *Controller) listPodMainVMEvents(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, "", controller.listVMEvents)
+}
+
+func (controller *Controller) listPodVMEvents(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, ctx.Param("vm"), controller.listVMEvents)
+}
+
+func (controller *Controller) appendPodMainVMEvents(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, "", controller.appendVMEvents)
+}
+
+func (controller *Controller) appendPodVMEvents(ctx *gin.Context) responder.Responder {
+	return controller.withPodVM(ctx, ctx.Param("vm"), controller.appendVMEvents)
+}
+
 func hydratePodState(txn storepkg.Transaction, pod *v1.Pod) error {
 	pod.Status = v1.PodStatusRunning
 	pod.StatusMessage = ""
@@ -204,4 +244,48 @@ func hydratePodState(txn storepkg.Transaction, pod *v1.Pod) error {
 
 func podVMResourceName(podName string, vmName string) string {
 	return fmt.Sprintf("%s:%s", podName, vmName)
+}
+
+func (controller *Controller) withPodVM(
+	ctx *gin.Context,
+	memberName string,
+	fn func(*gin.Context) responder.Responder,
+) responder.Responder {
+	var vmName string
+
+	if responder := controller.storeView(func(txn storepkg.Transaction) responder.Responder {
+		pod, err := txn.GetPod(ctx.Param("name"))
+		if err != nil {
+			return responder.Error(err)
+		}
+
+		if memberName == "" {
+			memberName = pod.Main.Name
+		}
+
+		for _, member := range pod.Members() {
+			if member.Name == memberName {
+				vmName = podVMResourceName(pod.Name, member.Name)
+				return nil
+			}
+		}
+
+		return responder.JSON(http.StatusNotFound, NewErrorResponse("Pod VM %q doesn't exist", memberName))
+	}); responder != nil {
+		return responder
+	}
+
+	originalParams := ctx.Params
+	ctx.Params = append(gin.Params(nil), originalParams...)
+	for index := range ctx.Params {
+		if ctx.Params[index].Key == "name" {
+			ctx.Params[index].Value = vmName
+			break
+		}
+	}
+	defer func() {
+		ctx.Params = originalParams
+	}()
+
+	return fn(ctx)
 }

@@ -374,6 +374,12 @@ func (client *Client) VMs() *VMsService {
 	}
 }
 
+func (client *Client) Pods() *PodsService {
+	return &PodsService{
+		client: client,
+	}
+}
+
 func (client *Client) ServiceAccounts() *ServiceAccountsService {
 	return &ServiceAccountsService{
 		client: client,

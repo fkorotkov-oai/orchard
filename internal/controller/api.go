@@ -201,6 +201,36 @@ func (controller *Controller) initAPI() *gin.Engine {
 	v1.DELETE("/pods/:name", func(c *gin.Context) {
 		controller.deletePod(c).Respond(c)
 	})
+	v1.GET("/pods/:name/exec", func(c *gin.Context) {
+		controller.execPodMainVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/port-forward", func(c *gin.Context) {
+		controller.portForwardPodMainVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/ip", func(c *gin.Context) {
+		controller.ipPodMainVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/events", func(c *gin.Context) {
+		controller.listPodMainVMEvents(c).Respond(c)
+	})
+	v1.POST("/pods/:name/events", func(c *gin.Context) {
+		controller.appendPodMainVMEvents(c).Respond(c)
+	})
+	v1.GET("/pods/:name/vms/:vm/exec", func(c *gin.Context) {
+		controller.execPodVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/vms/:vm/port-forward", func(c *gin.Context) {
+		controller.portForwardPodVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/vms/:vm/ip", func(c *gin.Context) {
+		controller.ipPodVM(c).Respond(c)
+	})
+	v1.GET("/pods/:name/vms/:vm/events", func(c *gin.Context) {
+		controller.listPodVMEvents(c).Respond(c)
+	})
+	v1.POST("/pods/:name/vms/:vm/events", func(c *gin.Context) {
+		controller.appendPodVMEvents(c).Respond(c)
+	})
 
 	return ginEngine
 }
